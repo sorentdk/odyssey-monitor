@@ -29,6 +29,7 @@ import sys
 import time
 import urllib.parse
 import urllib.request
+from datetime import datetime
 
 # ----------------------------------------------------------------------------
 # Configuration (override with environment variables)
@@ -161,7 +162,7 @@ def send_push(title, message, click_url=None):
     headers = dict(UA)
     headers["Title"] = title
     headers["Priority"] = "urgent"
-    headers["Tags"] = "clapper,tickets"
+    headers["Tags"] = "ticket"
     if click_url:
         headers["Click"] = click_url
     req = urllib.request.Request(f"{NTFY_SERVER}/{NTFY_TOPIC}",
@@ -206,7 +207,8 @@ def run_cycle(alerted, seen):
             continue
         fetched += 1
 
-        label = f"{s['businessDate']} {s['displayTime']}"
+        d = datetime.strptime(s["businessDate"], "%Y-%m-%d")
+        when = f"{d.strftime('%a %b ')}{d.day} · {s['displayTime']}"
         pairs = find_adjacent_pairs(seat_map)
         cur_keys = {f"{sid}:{'+'.join(g)}": g for g in pairs}
 
@@ -215,10 +217,9 @@ def run_cycle(alerted, seen):
             if key in alerted:
                 continue
             row = grp[0][0]
-            title = f"Odyssey seats open: {label}"
-            msg = (f"Row {row}: {', '.join(grp)}\n{label}\n"
-                   f"Buy: {s['buyUrl']}")
-            print(f"  >> NEW MATCH {label}: {grp}")
+            title = when
+            msg = f"{len(grp)} seats: {' + '.join(grp)}"
+            print(f"  >> NEW MATCH {when}: {grp}")
             send_push(title, msg, click_url=s["buyUrl"])
             alerted.add(key)
             new_pushes += 1

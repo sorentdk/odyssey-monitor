@@ -1,0 +1,48 @@
+name: seat-monitor
+
+# Runs 24/7 on GitHub's servers, free for public repos.
+# GitHub cron can't fire more often than every 5 min, so each run LOOPS
+# internally and checks every 60s for ~5 min (LOOP_SECONDS below). The next
+# scheduled run picks up where this one left off -> effective 1-minute polling.
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {}   # lets you run it manually from the Actions tab
+
+permissions:
+  contents: write         # needed to save state.json between runs
+
+concurrency:
+  group: seat-monitor
+  cancel-in-progress: false   # don't kill a running check when the next fires
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run seat monitor
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          START_DATE: "2026-07-29"
+          END_DATE: "2026-08-15"
+          EXCLUDED_DATES: "2026-08-07,2026-08-08,2026-08-09"
+          ALLOWED_ROWS: "E,F,G,H,J,K,L,M,N"
+          GROUP_SIZE: "2"
+          INTERVAL_SECONDS: "60"    # check every 60 seconds
+          LOOP_SECONDS: "290"       # keep looping ~5 min, then let cron relaunch
+        run: python3 monitor.py
+
+      - name: Persist state
+        run: |
+          if [[ -n "$(git status --porcelain state.json)" ]]; then
+            git config user.name "seat-monitor"
+            git config user.email "actions@users.noreply.github.com"
+            git add state.json
+            git commit -m "update state [skip ci]"
+            git push
+          else
+            echo "No state change."
+          fi
